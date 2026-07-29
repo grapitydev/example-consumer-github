@@ -1,0 +1,3759 @@
+openapi: 3.1.0
+info:
+  description: >
+    The Grapity Registry is an API contract guardian. It validates, versions,
+    and enforces backward compatibility for OpenAPI and AsyncAPI specs. It also
+    manages gateway configurations and ingests gateway access logs. Every spec
+    that enters the registry has earned its place.
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  title: Grapity Registry API
+  version: 0.2.0
+servers:
+  - description: Production server
+    url: https://registry.grapity.dev
+  - description: Local development server
+    url: http://localhost:3750
+tags:
+  - description: Server health
+    name: health
+  - description: >-
+      Spec management — push, list, retrieve, validate, versions, delete, and
+      compatibility
+    name: specs
+  - description: Gateway configuration management
+    name: gateway-configs
+  - description: Gateway access log ingestion and querying
+    name: gateway-logs
+paths:
+  /v1/gateway-configs:
+    get:
+      tags:
+        - gateway-configs
+      summary: List all gateway configurations
+      operationId: listGatewayConfigs
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      - createdAt: '2026-04-25T10:30:00.000Z'
+                        id: cfg-uuid-1
+                        name: payments-api-gateway
+                        provider: kong
+                        specName: payments-api
+                        specSemver: 1.2.0
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+              schema:
+                $ref: '#/components/schemas/ListGatewayConfigsResponse'
+          description: List of gateway configurations
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-configs:read
+    post:
+      tags:
+        - gateway-configs
+      summary: Push a gateway configuration version
+      description: >
+        Push a new gateway configuration version. On the first push for a given
+        name, the config is created. On subsequent pushes, a new version is
+        added and old versions are retained (up to 5).
+      operationId: pushGatewayConfig
+      requestBody:
+        content:
+          application/json:
+            examples:
+              default:
+                summary: Default
+                value:
+                  callerIdentification:
+                    rules:
+                      - confidence: high
+                        source: header:x-consumer-id
+                    strategy: first-match
+                  content: |-
+                    apiVersion: v1
+                    kind: GatewayConfig
+                  environments:
+                    staging:
+                      kongAddr: http://kong-staging:8001
+                      plugins:
+                        - config:
+                            minute: 1000
+                          name: rate-limiting
+                          order: 1
+                        - config:
+                            issuer: https://auth.example.com
+                          name: jwt
+                          order: 2
+                      upstream: http://payments-staging:8080
+                  name: payments-api-gateway
+                  provider: kong
+                  pushedBy: github-actions[bot]
+                  routes:
+                    - methods:
+                        - GET
+                        - POST
+                      path: /payments
+                    - methods:
+                        - GET
+                        - PUT
+                        - DELETE
+                      path: /payments/{id}
+                  specName: payments-api
+                  specSemver: 1.2.0
+            schema:
+              $ref: '#/components/schemas/PushGatewayConfigRequest'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      config:
+                        createdAt: '2026-04-25T10:30:00.000Z'
+                        id: cfg-uuid-1
+                        name: payments-api-gateway
+                        provider: kong
+                        specName: payments-api
+                        specSemver: 1.2.0
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+                      version:
+                        callerIdentification:
+                          rules:
+                            - confidence: high
+                              source: header:x-consumer-id
+                          strategy: first-match
+                        checksum: sha256-abc123
+                        content: |-
+                          apiVersion: v1
+                          kind: GatewayConfig
+                        createdAt: '2026-06-07T14:00:00.000Z'
+                        environments:
+                          - kongAddr: http://kong-staging:8001
+                            name: staging
+                            plugins:
+                              - config:
+                                  minute: 1000
+                                name: rate-limiting
+                                order: 1
+                            upstream: http://payments-staging:8080
+                        gatewayConfigId: cfg-uuid-1
+                        id: ver-uuid-1
+                        pushedBy: github-actions[bot]
+                        routes:
+                          - methods:
+                              - GET
+                              - POST
+                            path: /payments
+              schema:
+                $ref: '#/components/schemas/PushGatewayConfigResponse'
+          description: Gateway configuration version registered successfully
+        '400':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: bad_request
+                    message: 'Missing required field: name'
+                    statusCode: 400
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Missing required fields
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '409':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: name_exists
+                    message: >-
+                      Gateway config name 'payments-api-gateway' already exists
+                      with a different spec
+                    statusCode: 409
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Gateway config name already exists with different spec
+        '422':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unsupported_provider
+                    message: Unsupported provider 'nginx'
+                    statusCode: 422
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: >-
+            Validation error (unsupported provider, spec not found, route not
+            found, or no environments)
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-configs:write
+  /v1/gateway-configs/{name}:
+    get:
+      tags:
+        - gateway-configs
+      summary: Get a gateway configuration
+      operationId: getGatewayConfig
+      parameters:
+        - $ref: '#/components/parameters/gatewayConfigName'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      createdAt: '2026-04-25T10:30:00.000Z'
+                      id: cfg-uuid-1
+                      name: payments-api-gateway
+                      provider: kong
+                      specName: payments-api
+                      specSemver: 1.2.0
+                      updatedAt: '2026-06-07T14:00:00.000Z'
+              schema:
+                $ref: '#/components/schemas/GetGatewayConfigResponse'
+          description: Gateway configuration metadata
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Gateway config "payments-api-gateway" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Gateway config not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-configs:read
+  /v1/gateway-configs/{name}/versions:
+    get:
+      tags:
+        - gateway-configs
+      summary: List all versions of a gateway configuration
+      operationId: listGatewayConfigVersions
+      parameters:
+        - $ref: '#/components/parameters/gatewayConfigName'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      - callerIdentification:
+                          rules:
+                            - confidence: high
+                              source: header:x-consumer-id
+                          strategy: first-match
+                        checksum: sha256-abc123
+                        createdAt: '2026-06-07T14:00:00.000Z'
+                        environments:
+                          - kongAddr: http://kong-staging:8001
+                            name: staging
+                            plugins:
+                              - config:
+                                  minute: 1000
+                                name: rate-limiting
+                                order: 1
+                            upstream: http://payments-staging:8080
+                        gatewayConfigId: cfg-uuid-1
+                        id: ver-uuid-1
+                        pushedBy: github-actions[bot]
+                        routes:
+                          - methods:
+                              - GET
+                              - POST
+                            path: /payments
+              schema:
+                $ref: '#/components/schemas/ListGatewayConfigVersionsResponse'
+          description: List of gateway config versions
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Gateway config "payments-api-gateway" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Gateway config not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-configs:read
+  /v1/gateway-configs/{name}/versions/{versionId}:
+    get:
+      tags:
+        - gateway-configs
+      summary: Get a specific gateway configuration version
+      operationId: getGatewayConfigVersion
+      parameters:
+        - $ref: '#/components/parameters/gatewayConfigName'
+        - $ref: '#/components/parameters/versionId'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      callerIdentification:
+                        rules:
+                          - confidence: high
+                            source: header:x-consumer-id
+                        strategy: first-match
+                      checksum: sha256-abc123
+                      content: |-
+                        apiVersion: v1
+                        kind: GatewayConfig
+                      createdAt: '2026-06-07T14:00:00.000Z'
+                      environments:
+                        - kongAddr: http://kong-staging:8001
+                          name: staging
+                          plugins:
+                            - config:
+                                minute: 1000
+                              name: rate-limiting
+                              order: 1
+                          upstream: http://payments-staging:8080
+                      gatewayConfigId: cfg-uuid-1
+                      id: ver-uuid-1
+                      pushedBy: github-actions[bot]
+                      routes:
+                        - methods:
+                            - GET
+                            - POST
+                          path: /payments
+              schema:
+                $ref: '#/components/schemas/GetGatewayConfigVersionResponse'
+          description: Gateway configuration version detail
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: >-
+                      Version ver-uuid-99 not found for gateway config
+                      "payments-api-gateway"
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Gateway config or version not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-configs:read
+  /v1/gateway-logs:
+    get:
+      tags:
+        - gateway-logs
+      summary: Query gateway access logs
+      operationId: listGatewayLogs
+      parameters:
+        - description: Filter by gateway config name
+          in: query
+          name: gatewayConfig
+          schema:
+            type: string
+        - description: Filter by environment
+          in: query
+          name: environment
+          schema:
+            type: string
+        - description: Filter by request path
+          in: query
+          name: path
+          schema:
+            type: string
+        - description: Filter by HTTP method
+          in: query
+          name: method
+          schema:
+            type: string
+        - description: Filter by response status code
+          in: query
+          name: status
+          schema:
+            type: integer
+        - description: Start of time range (ISO 8601)
+          in: query
+          name: from
+          schema:
+            format: date-time
+            type: string
+        - description: End of time range (ISO 8601)
+          in: query
+          name: to
+          schema:
+            format: date-time
+            type: string
+        - description: Maximum number of logs to return
+          in: query
+          name: limit
+          schema:
+            default: 50
+            type: integer
+        - description: Number of logs to skip
+          in: query
+          name: offset
+          schema:
+            default: 0
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      - callerConfidence: high
+                        callerId: consumer-123
+                        callerSource: header:x-consumer-id
+                        createdAt: '2026-06-07T14:00:01.000Z'
+                        environment: staging
+                        gatewayConfigName: payments-api-gateway
+                        id: log-uuid-1
+                        method: GET
+                        occurredAt: '2026-06-07T14:00:00.000Z'
+                        path: /payments
+                        provider: kong
+                        routePath: /payments
+                        status: 200
+                    pagination:
+                      hasMore: false
+                      limit: 50
+                      offset: 0
+                      total: 1
+              schema:
+                $ref: '#/components/schemas/ListGatewayLogsResponse'
+          description: Paginated list of gateway logs
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-logs:read
+  /v1/gateway-logs/ingest/{provider}/{environment}:
+    post:
+      tags:
+        - gateway-logs
+      summary: Ingest a gateway access log
+      description: >
+        Ingest a raw gateway access log entry. The payload format depends on the
+        provider. For Kong, expects a Kong HTTP log payload.
+      operationId: ingestGatewayLog
+      parameters:
+        - $ref: '#/components/parameters/provider'
+        - $ref: '#/components/parameters/environment'
+      requestBody:
+        content:
+          application/json:
+            examples:
+              default:
+                summary: Default
+                value:
+                  latencies:
+                    request: 42
+                  request:
+                    headers:
+                      x-consumer-id: consumer-123
+                    method: GET
+                    uri: /payments
+                  response:
+                    status: 200
+                  service:
+                    name: payments-api-gateway
+            schema:
+              description: Provider-specific log payload
+              type: object
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    status: ok
+              schema:
+                properties:
+                  status:
+                    examples:
+                      - ok
+                    type: string
+                type: object
+          description: Log ingested successfully
+        '400':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: bad_request
+                    message: Missing service.name in gateway log payload
+                    statusCode: 400
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Invalid log payload
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-logs:write
+  /v1/gateway-logs/stats:
+    get:
+      tags:
+        - gateway-logs
+      summary: Get gateway log usage statistics
+      operationId: getGatewayLogStats
+      parameters:
+        - description: Filter by gateway config name
+          in: query
+          name: gatewayConfig
+          schema:
+            type: string
+        - description: Filter by environment
+          in: query
+          name: environment
+          schema:
+            type: string
+        - description: Start of time range (ISO 8601)
+          in: query
+          name: from
+          schema:
+            format: date-time
+            type: string
+        - description: End of time range (ISO 8601)
+          in: query
+          name: to
+          schema:
+            format: date-time
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      - environment: staging
+                        gatewayConfigName: payments-api-gateway
+                        lastSeenAt: '2026-06-07T14:00:00.000Z'
+                        method: GET
+                        routePath: /payments
+                        totalCalls: 15042
+                        uniqueCallerIds: 128
+              schema:
+                $ref: '#/components/schemas/GetGatewayLogStatsResponse'
+          description: Usage statistics grouped by endpoint
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-logs:read
+  /v1/gateway-logs/{id}:
+    get:
+      tags:
+        - gateway-logs
+      summary: Get a single gateway log entry
+      operationId: getGatewayLog
+      parameters:
+        - $ref: '#/components/parameters/logId'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      callerConfidence: high
+                      callerId: consumer-123
+                      callerSource: header:x-consumer-id
+                      createdAt: '2026-06-07T14:00:01.000Z'
+                      environment: staging
+                      gatewayConfigName: payments-api-gateway
+                      id: log-uuid-1
+                      method: GET
+                      occurredAt: '2026-06-07T14:00:00.000Z'
+                      path: /payments
+                      provider: kong
+                      routePath: /payments
+                      status: 200
+              schema:
+                $ref: '#/components/schemas/GetGatewayLogResponse'
+          description: Gateway log entry
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Log not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Log entry not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - gateway-logs:read
+  /v1/health:
+    get:
+      tags:
+        - health
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    status: ok
+                    uptime: 3600.42
+                    version: 0.0.0
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+          description: Server is healthy
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security: []
+  /v1/specs:
+    get:
+      tags:
+        - specs
+      summary: List all specs
+      description: >
+        Anonymous access: requests without a token receive only specs whose
+        visibility is "public". Authenticated requests receive all specs.
+      operationId: listSpecs
+      parameters:
+        - description: Filter by spec type
+          in: query
+          name: type
+          schema:
+            $ref: '#/components/schemas/SpecType'
+        - description: Filter by owner
+          in: query
+          name: owner
+          schema:
+            type: string
+        - description: Comma-separated list of tags to filter by
+          examples:
+            default:
+              summary: Default
+              value: payments,public
+          in: query
+          name: tags
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      - createdAt: '2026-04-25T10:30:00.000Z'
+                        description: Payments service API
+                        id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                        latestVersion:
+                          checksum: sha256-abc123
+                          createdAt: '2026-06-07T14:00:00.000Z'
+                          gitRef: a1b2c3d4
+                          id: ver-uuid-1
+                          isPrerelease: false
+                          previousVersion: 1.1.0
+                          pushedBy: github-actions[bot]
+                          semver: 1.2.0
+                          specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                        name: payments-api
+                        owner: platform-team
+                        sourceRepo: https://github.com/acme/payments-service
+                        tags:
+                          - payments
+                          - public
+                        type: openapi
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+                      - createdAt: '2026-05-01T09:00:00.000Z'
+                        description: Event-driven notifications
+                        id: b2c3d4e5-f6a7-8901-bcde-f23456789012
+                        latestVersion:
+                          checksum: sha256-def456
+                          createdAt: '2026-05-15T11:30:00.000Z'
+                          id: ver-uuid-2
+                          isPrerelease: true
+                          semver: 0.3.0
+                          specId: b2c3d4e5-f6a7-8901-bcde-f23456789012
+                        name: notifications-api
+                        owner: messaging-team
+                        tags:
+                          - events
+                          - internal
+                        type: asyncapi
+                        updatedAt: '2026-05-15T11:30:00.000Z'
+              schema:
+                $ref: '#/components/schemas/ListSpecsResponse'
+          description: List of specs
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+    post:
+      tags:
+        - specs
+      summary: Push a spec version
+      description: >
+        Push a new spec version to the registry. On the first push for a given
+        name, the spec is created. On subsequent pushes, the spec is diffed
+        against the previous version. Breaking changes are blocked unless
+        `force: true` is provided with a reason. The registry assigns the
+        version number and rewrites `info.version` inside the stored document to
+        match it; the pushed `info.version` value is discarded.
+      operationId: pushSpec
+      requestBody:
+        content:
+          application/json:
+            examples:
+              default:
+                summary: Default
+                value:
+                  content: |
+                    openapi: 3.1.0
+                    info:
+                      title: Payments API
+                      version: 1.0.0
+                    paths:
+                      /payments:
+                        get:
+                          operationId: listPayments
+                          responses:
+                            '200':
+                              description: OK
+                  description: Payments service API
+                  force: false
+                  gitRef: a1b2c3d4
+                  name: payments-api
+                  owner: platform-team
+                  prerelease: false
+                  pushedBy: github-actions[bot]
+                  sourceRepo: https://github.com/acme/payments-service
+                  tags:
+                    - payments
+                    - public
+                  type: openapi
+            schema:
+              $ref: '#/components/schemas/PushSpecRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      compatReport:
+                        breakingChanges: []
+                        classification: patch
+                        previousVersion: 1.1.0
+                        safeChanges: []
+                      isNewSpec: false
+                      spec:
+                        createdAt: '2026-04-25T10:30:00.000Z'
+                        description: Payments service API
+                        id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                        name: payments-api
+                        owner: platform-team
+                        sourceRepo: https://github.com/acme/payments-service
+                        tags:
+                          - payments
+                          - public
+                        type: openapi
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+                      unchanged: true
+                      version:
+                        checksum: sha256-def456
+                        createdAt: '2026-05-10T09:00:00.000Z'
+                        gitRef: 9z8y7x6w
+                        id: ver-uuid-2
+                        isPrerelease: false
+                        previousVersion: 1.0.0
+                        pushedBy: github-actions[bot]
+                        semver: 1.1.0
+                        specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              schema:
+                $ref: '#/components/schemas/PushSpecResponse'
+          description: >-
+            Pushed content is identical to the latest version; no new version
+            was created
+        '201':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      compatReport:
+                        breakingChanges: []
+                        classification: minor
+                        previousVersion: 1.1.0
+                        safeChanges:
+                          - description: Endpoint GET /payments/{id}/refunds added
+                            id: chg-1
+                            path: /payments/{id}/refunds/GET
+                            rule: endpoint-added
+                        suggestedVersion: 1.2.0
+                      isNewSpec: false
+                      spec:
+                        createdAt: '2026-04-25T10:30:00.000Z'
+                        description: Payments service API
+                        id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                        name: payments-api
+                        owner: platform-team
+                        sourceRepo: https://github.com/acme/payments-service
+                        tags:
+                          - payments
+                          - public
+                        type: openapi
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+                      version:
+                        checksum: sha256-ghi789
+                        compatibility:
+                          breakingChanges: []
+                          classification: minor
+                          previousVersion: 1.1.0
+                          safeChanges:
+                            - description: Endpoint GET /payments/{id}/refunds added
+                              id: chg-1
+                              path: /payments/{id}/refunds/GET
+                              rule: endpoint-added
+                          suggestedVersion: 1.2.0
+                        createdAt: '2026-06-07T14:00:00.000Z'
+                        gitRef: a1b2c3d4
+                        id: ver-uuid-3
+                        isPrerelease: false
+                        previousVersion: 1.1.0
+                        pushedBy: github-actions[bot]
+                        semver: 1.2.0
+                        specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              schema:
+                $ref: '#/components/schemas/PushSpecResponse'
+          description: Spec version registered successfully
+        '400':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: bad_request
+                    message: 'Missing required field: content'
+                    statusCode: 400
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Missing required fields or invalid spec content
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '409':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    compatReport:
+                      breakingChanges:
+                        - description: >-
+                            Response property 'userId' was removed from GET
+                            /users/{id}
+                          id: chg-2
+                          path: /users/{id}/GET/response/200/userId
+                          rule: response-property-removed
+                      classification: major
+                      previousVersion: 1.1.0
+                      safeChanges: []
+                      suggestedVersion: 2.0.0
+                    error: breaking_change
+                    message: >-
+                      Breaking changes detected. Use force: true with a reason
+                      to override.
+                    statusCode: 409
+              schema:
+                $ref: '#/components/schemas/BreakingChangeError'
+          description: >
+            Breaking change detected. The spec breaks backward compatibility
+            with the previous version. Use `force: true` with a `reason` to
+            override and create an audit record.
+        '422':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: prerelease_constraint
+                    message: >-
+                      Cannot push pre-release version. payments-api@1.1.0 is
+                      already a release version.
+                    statusCode: 422
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: >
+            Prerelease constraint violation. A prerelease version (0.x) cannot
+            be pushed after a release version (1.x+) has already been
+            registered.
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:write
+  /v1/specs/{name}:
+    get:
+      tags:
+        - specs
+      summary: Get a spec and its latest version
+      description: >
+        Anonymous access: requests without a token are allowed when the spec's
+        visibility is "public". For private specs, anonymous requests receive
+        404 so spec names cannot be enumerated.
+      operationId: getSpec
+      parameters:
+        - $ref: '#/components/parameters/specName'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      latestVersion:
+                        checksum: sha256-abc123
+                        createdAt: '2026-06-07T14:00:00.000Z'
+                        gitRef: a1b2c3d4
+                        id: ver-uuid-1
+                        isPrerelease: false
+                        previousVersion: 1.1.0
+                        pushedBy: github-actions[bot]
+                        semver: 1.2.0
+                        specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                      spec:
+                        createdAt: '2026-04-25T10:30:00.000Z'
+                        description: Payments service API
+                        id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                        name: payments-api
+                        owner: platform-team
+                        sourceRepo: https://github.com/acme/payments-service
+                        tags:
+                          - payments
+                          - public
+                        type: openapi
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+              schema:
+                $ref: '#/components/schemas/GetSpecResponse'
+          description: Spec metadata and latest version
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+    delete:
+      tags:
+        - specs
+      summary: Delete a spec and all its versions
+      description: >
+        Deletes a spec and all associated versions from the registry. This
+        action is permanent and cannot be undone. The operation is recorded in
+        the audit log.
+      operationId: deleteSpec
+      parameters:
+        - $ref: '#/components/parameters/specName'
+      responses:
+        '204':
+          description: Spec deleted successfully
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:write
+    patch:
+      tags:
+        - specs
+      summary: Update spec metadata
+      description: >
+        Updates mutable spec metadata. Currently supports changing `visibility`
+        to publish or unpublish anonymous read access. Changes take effect
+        immediately and do not create a new version.
+      operationId: updateSpec
+      parameters:
+        - $ref: '#/components/parameters/specName'
+      requestBody:
+        content:
+          application/json:
+            examples:
+              default:
+                summary: Default
+                value:
+                  visibility: public
+            schema:
+              $ref: '#/components/schemas/UpdateSpecRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      spec:
+                        createdAt: '2026-04-25T10:30:00.000Z'
+                        description: Payments service API
+                        id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                        name: payments-api
+                        owner: platform-team
+                        sourceRepo: https://github.com/acme/payments-service
+                        tags:
+                          - payments
+                          - public
+                        type: openapi
+                        updatedAt: '2026-06-07T14:00:00.000Z'
+                        visibility: public
+              schema:
+                $ref: '#/components/schemas/UpdateSpecResponse'
+          description: Spec updated
+        '400':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: bad_request
+                    message: 'Missing required field: visibility'
+                    statusCode: 400
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Missing or unknown visibility value
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:write
+  /v1/specs/{name}/compare:
+    get:
+      tags:
+        - specs
+      summary: Compare two versions of a spec
+      description: >-
+        Returns an incremental comparison between two versions. All versions
+        between the two endpoints are included, ordered oldest to newest. The
+        response contains the precomputed compatibility report for each step.
+        Anonymous access: requests without a token are allowed when the spec's
+        visibility is "public". For private specs, anonymous requests receive
+        404 so spec names cannot be enumerated.
+      operationId: compareVersions
+      parameters:
+        - $ref: '#/components/parameters/specName'
+        - description: >-
+            Starting version (inclusive). If newer than `to`, the order is
+            normalized.
+          examples:
+            default:
+              summary: Default
+              value: 1.0.0
+          in: query
+          name: from
+          required: true
+          schema:
+            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+            type: string
+        - description: >-
+            Ending version (inclusive). If older than `from`, the order is
+            normalized.
+          examples:
+            default:
+              summary: Default
+              value: 1.3.0
+          in: query
+          name: to
+          required: true
+          schema:
+            pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      from: 1.0.0
+                      steps:
+                        - breakingChanges: []
+                          classification: minor
+                          previousVersion: 1.0.0
+                          safeChanges:
+                            - category: structural
+                              description: Endpoint GET /payments/{id}/refunds added
+                              id: chg-1
+                              path: /payments/{id}/refunds/GET
+                              rule: endpoint-added
+                          version: 1.1.0
+                        - breakingChanges: []
+                          classification: patch
+                          previousVersion: 1.1.0
+                          safeChanges: []
+                          version: 1.2.0
+                        - breakingChanges:
+                            - category: structural
+                              description: >-
+                                Response property 'userId' was removed from GET
+                                /users/{id}
+                              id: chg-2
+                              path: /users/{id}/GET/response/200/userId
+                              rule: response-property-removed
+                          classification: major
+                          previousVersion: 1.2.0
+                          safeChanges: []
+                          version: 1.3.0
+                      to: 1.3.0
+              schema:
+                $ref: '#/components/schemas/CompareVersionsResponse'
+          description: Incremental comparison between versions
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Version 1.3.0 not found for spec "payments-api"
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec or version not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/compat/{semver}:
+    get:
+      tags:
+        - specs
+      summary: Get the compatibility report for a version
+      description: >
+        Returns the compatibility report generated when this version was pushed.
+        Not available for the first version of a spec (no previous version to
+        diff against). Anonymous access: requests without a token are allowed
+        when the spec's visibility is "public". For private specs, anonymous
+        requests receive 404 so spec names cannot be enumerated.
+      operationId: getCompatReport
+      parameters:
+        - $ref: '#/components/parameters/specName'
+        - $ref: '#/components/parameters/semver'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      breakingChanges: []
+                      classification: minor
+                      previousVersion: 1.1.0
+                      safeChanges:
+                        - description: Endpoint GET /payments/{id}/refunds added
+                          id: chg-1
+                          path: /payments/{id}/refunds/GET
+                          rule: endpoint-added
+                      suggestedVersion: 1.2.0
+              schema:
+                $ref: '#/components/schemas/GetCompatReportResponse'
+          description: Compatibility report
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Compat report not found for payments-api@1.0.0
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec, version, or compat report not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/spec.json:
+    get:
+      tags:
+        - specs
+      summary: Get the latest spec as JSON
+      description: >
+        Returns the latest version of the spec document as a parsed JSON object.
+        The spec is converted to JSON regardless of the format it was pushed in.
+        Content-Type reflects the spec type (OpenAPI or AsyncAPI). The
+        document's `info.version` is the registry-assigned version, rewritten at
+        push time. Anonymous access: requests without a token are allowed when
+        the spec's visibility is "public". For private specs, anonymous requests
+        receive 404 so spec names cannot be enumerated.
+      operationId: getSpecJson
+      parameters:
+        - $ref: '#/components/parameters/specName'
+      responses:
+        '200':
+          content:
+            application/vnd.aai.asyncapi+json:
+              schema:
+                type: object
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+          description: Spec document as JSON
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/spec.yaml:
+    get:
+      tags:
+        - specs
+      summary: Get the latest spec as YAML
+      description: >
+        Returns the latest version of the spec document as YAML text. The spec
+        is converted to YAML regardless of the format it was pushed in.
+        Content-Type reflects the spec type (OpenAPI or AsyncAPI). The
+        document's `info.version` is the registry-assigned version, rewritten at
+        push time. Anonymous access: requests without a token are allowed when
+        the spec's visibility is "public". For private specs, anonymous requests
+        receive 404 so spec names cannot be enumerated.
+      operationId: getSpecYaml
+      parameters:
+        - $ref: '#/components/parameters/specName'
+      responses:
+        '200':
+          content:
+            application/vnd.aai.asyncapi+yaml:
+              schema:
+                type: string
+            application/vnd.oai.openapi+yaml:
+              schema:
+                type: string
+          description: Spec document as YAML
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/validate:
+    post:
+      tags:
+        - specs
+      summary: Validate a spec without pushing
+      description: >
+        Validates the spec content and checks backward compatibility against the
+        latest registered version for this name. Does not store anything. When
+        no spec exists for the name, the content is validated structurally and
+        reported as an initial version (compatReport classification `initial`,
+        previousVersion `0.0.0`), mirroring what a first push would accept.
+      operationId: validateSpec
+      parameters:
+        - $ref: '#/components/parameters/specName'
+      requestBody:
+        content:
+          application/json:
+            examples:
+              default:
+                summary: Default
+                value:
+                  content: |
+                    openapi: 3.1.0
+                    info:
+                      title: Payments API
+                      version: 1.0.0
+                    paths:
+                      /payments:
+                        get:
+                          operationId: listPayments
+                          responses:
+                            '200':
+                              description: OK
+            schema:
+              $ref: '#/components/schemas/ValidateSpecRequest'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      compatReport:
+                        breakingChanges: []
+                        classification: minor
+                        previousVersion: 1.1.0
+                        safeChanges:
+                          - description: Endpoint GET /payments/{id}/refunds added
+                            id: chg-1
+                            path: /payments/{id}/refunds/GET
+                            rule: endpoint-added
+                        suggestedVersion: 1.2.0
+                      valid: true
+                      warnings: []
+              schema:
+                $ref: '#/components/schemas/ValidateSpecResponse'
+          description: Validation result
+        '400':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: bad_request
+                    message: Request body must be valid JSON
+                    statusCode: 400
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Missing required fields
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:write
+  /v1/specs/{name}/versions:
+    get:
+      tags:
+        - specs
+      summary: List all versions of a spec
+      description: >
+        Returns versions ordered newest first. Anonymous access: requests
+        without a token are allowed when the spec's visibility is "public". For
+        private specs, anonymous requests receive 404 so spec names cannot be
+        enumerated.
+      operationId: listVersions
+      parameters:
+        - $ref: '#/components/parameters/specName'
+        - description: Maximum number of versions to return
+          in: query
+          name: limit
+          schema:
+            default: 10
+            maximum: 25
+            minimum: 1
+            type: integer
+        - description: Number of versions to skip
+          in: query
+          name: offset
+          schema:
+            default: 0
+            minimum: 0
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      - checksum: sha256-abc123
+                        createdAt: '2026-06-07T14:00:00.000Z'
+                        gitRef: a1b2c3d4
+                        id: ver-uuid-1
+                        isPrerelease: false
+                        previousVersion: 1.1.0
+                        pushedBy: github-actions[bot]
+                        semver: 1.2.0
+                        specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                      - checksum: sha256-old456
+                        createdAt: '2026-05-01T09:00:00.000Z'
+                        gitRef: b2c3d4e5
+                        id: ver-uuid-0
+                        isPrerelease: false
+                        previousVersion: 1.0.0
+                        pushedBy: github-actions[bot]
+                        semver: 1.1.0
+                        specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                    pagination:
+                      hasMore: false
+                      limit: 10
+                      offset: 0
+                      total: 2
+              schema:
+                $ref: '#/components/schemas/VersionsPage'
+          description: Paginated list of versions
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Spec "payments-api" not found
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/versions/{semver}:
+    get:
+      tags:
+        - specs
+      summary: Get a specific version
+      description: >
+        Anonymous access: requests without a token are allowed when the spec's
+        visibility is "public". For private specs, anonymous requests receive
+        404 so spec names cannot be enumerated.
+      operationId: getVersion
+      parameters:
+        - $ref: '#/components/parameters/specName'
+        - $ref: '#/components/parameters/semver'
+      responses:
+        '200':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    data:
+                      checksum: sha256-abc123
+                      createdAt: '2026-06-07T14:00:00.000Z'
+                      gitRef: a1b2c3d4
+                      id: ver-uuid-1
+                      isPrerelease: false
+                      previousVersion: 1.1.0
+                      pushedBy: github-actions[bot]
+                      semver: 1.2.0
+                      specId: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              schema:
+                $ref: '#/components/schemas/GetVersionResponse'
+          description: Version detail including full spec content
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Version 9.9.9 not found for spec "payments-api"
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec or version not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/versions/{semver}/spec.json:
+    get:
+      tags:
+        - specs
+      summary: Get a specific version as JSON
+      description: >
+        Returns the requested version of the spec document as a parsed JSON
+        object. The document's `info.version` equals the registry-assigned
+        `{semver}` in the path. Anonymous access: requests without a token are
+        allowed when the spec's visibility is "public". For private specs,
+        anonymous requests receive 404 so spec names cannot be enumerated.
+      operationId: getVersionSpecJson
+      parameters:
+        - $ref: '#/components/parameters/specName'
+        - $ref: '#/components/parameters/semver'
+      responses:
+        '200':
+          content:
+            application/vnd.aai.asyncapi+json:
+              schema:
+                type: object
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+          description: Spec document as JSON
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Version 9.9.9 not found for spec "payments-api"
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec or version not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+  /v1/specs/{name}/versions/{semver}/spec.yaml:
+    get:
+      tags:
+        - specs
+      summary: Get a specific version as YAML
+      description: >
+        Returns the requested version of the spec document as YAML text. The
+        document's `info.version` equals the registry-assigned `{semver}` in the
+        path. Anonymous access: requests without a token are allowed when the
+        spec's visibility is "public". For private specs, anonymous requests
+        receive 404 so spec names cannot be enumerated.
+      operationId: getVersionSpecYaml
+      parameters:
+        - $ref: '#/components/parameters/specName'
+        - $ref: '#/components/parameters/semver'
+      responses:
+        '200':
+          content:
+            application/vnd.aai.asyncapi+yaml:
+              schema:
+                type: string
+            application/vnd.oai.openapi+yaml:
+              schema:
+                type: string
+          description: Spec document as YAML
+        '401':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: unauthorized
+                    message: Invalid or missing bearer token
+                    statusCode: 401
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Unauthorized
+        '403':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: forbidden
+                    message: 'Missing required scope: specs:write'
+                    statusCode: 403
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Forbidden - missing required scope
+        '404':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: not_found
+                    message: Version 9.9.9 not found for spec "payments-api"
+                    statusCode: 404
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Spec or version not found
+        '500':
+          content:
+            application/json:
+              examples:
+                default:
+                  summary: Default
+                  value:
+                    error: internal_error
+                    message: Internal server error
+                    statusCode: 500
+              schema:
+                $ref: '#/components/schemas/ApiError'
+          description: Internal server error
+      security:
+        - keycloak:
+            - specs:read
+        - {}
+components:
+  schemas:
+    ApiError:
+      properties:
+        error:
+          description: Machine-readable error code
+          examples:
+            - not_found
+          type: string
+        message:
+          description: Human-readable error description
+          examples:
+            - Spec "payments-api" not found
+          type: string
+        statusCode:
+          examples:
+            - 404
+          type: integer
+      required:
+        - error
+        - message
+        - statusCode
+      type: object
+    BreakingChange:
+      properties:
+        affectedConsumers:
+          examples:
+            - - mobile-app
+              - web-portal
+          items:
+            type: string
+          type: array
+        category:
+          enum:
+            - structural
+            - documentation
+          examples:
+            - structural
+          type: string
+        description:
+          examples:
+            - Response property 'userId' was removed from GET /users/{id}
+          type: string
+        id:
+          examples:
+            - chg-2
+          type: string
+        newValue:
+          examples:
+            - 'null'
+          type: string
+        originalValue:
+          examples:
+            - string
+          type: string
+        path:
+          examples:
+            - /users/{id}/GET/response/200/userId
+          type: string
+        rule:
+          description: >
+            Machine-readable rule identifier. Treat as an open string — new
+            rules will be added as the compat engine evolves. Known values:
+            endpoint-removed, endpoint-removed-without-deprecation,
+            endpoint-removed-missing-sunset, endpoint-removed-before-sunset,
+            required-request-param-added, response-property-removed,
+            response-status-removed, stable-endpoint-marked-draft.
+          examples:
+            - response-property-removed
+          type: string
+      required:
+        - id
+        - rule
+        - description
+        - path
+        - category
+      title: BreakingChange
+      type: object
+    BreakingChangeError:
+      allOf:
+        - $ref: '#/components/schemas/ApiError'
+        - description: >
+            Returned when a push is blocked due to breaking changes. The
+            compatReport describes exactly what changed and suggests the correct
+            next semver.
+          properties:
+            compatReport:
+              $ref: '#/components/schemas/CompatReport'
+          required:
+            - compatReport
+          type: object
+    CallerIdentification:
+      properties:
+        rules:
+          items:
+            $ref: '#/components/schemas/CallerIdentificationRule'
+          type: array
+        strategy:
+          enum:
+            - first-match
+          examples:
+            - first-match
+          type: string
+      required:
+        - strategy
+        - rules
+      type: object
+    CallerIdentificationRule:
+      properties:
+        confidence:
+          enum:
+            - high
+            - medium
+            - low
+            - anonymous
+          examples:
+            - high
+          type: string
+        source:
+          examples:
+            - header:x-consumer-id
+          type: string
+      required:
+        - source
+        - confidence
+      type: object
+    CompareStep:
+      properties:
+        breakingChanges:
+          items:
+            $ref: '#/components/schemas/BreakingChange'
+          type: array
+        classification:
+          $ref: '#/components/schemas/VersionClassification'
+        previousVersion:
+          examples:
+            - 1.0.0
+          type: string
+        safeChanges:
+          items:
+            $ref: '#/components/schemas/SafeChange'
+          type: array
+        version:
+          examples:
+            - 1.1.0
+          type: string
+      required:
+        - version
+        - previousVersion
+        - classification
+        - breakingChanges
+        - safeChanges
+      type: object
+    CompareVersionsResponse:
+      properties:
+        data:
+          properties:
+            from:
+              examples:
+                - 1.0.0
+              type: string
+            steps:
+              items:
+                $ref: '#/components/schemas/CompareStep'
+              type: array
+            to:
+              examples:
+                - 1.3.0
+              type: string
+          required:
+            - from
+            - to
+            - steps
+          type: object
+      required:
+        - data
+      type: object
+    CompatReport:
+      properties:
+        breakingChanges:
+          items:
+            $ref: '#/components/schemas/BreakingChange'
+          type: array
+        classification:
+          $ref: '#/components/schemas/VersionClassification'
+        previousVersion:
+          examples:
+            - 1.1.0
+          type: string
+        safeChanges:
+          items:
+            $ref: '#/components/schemas/SafeChange'
+          type: array
+        suggestedVersion:
+          description: The version the registry suggests based on the classification
+          examples:
+            - 2.0.0
+          type: string
+      required:
+        - previousVersion
+        - classification
+        - breakingChanges
+        - safeChanges
+      type: object
+    GatewayConfig:
+      properties:
+        createdAt:
+          examples:
+            - '2026-04-25T10:30:00.000Z'
+          format: date-time
+          type: string
+        id:
+          examples:
+            - cfg-uuid-1
+          format: uuid
+          type: string
+        name:
+          examples:
+            - payments-api-gateway
+          type: string
+        provider:
+          enum:
+            - kong
+          examples:
+            - kong
+          type: string
+        specName:
+          examples:
+            - payments-api
+          type: string
+        specSemver:
+          examples:
+            - 1.2.0
+          type: string
+        updatedAt:
+          examples:
+            - '2026-06-07T14:00:00.000Z'
+          format: date-time
+          type: string
+      required:
+        - id
+        - name
+        - provider
+        - specName
+        - specSemver
+        - createdAt
+        - updatedAt
+      type: object
+    GatewayConfigVersion:
+      properties:
+        callerIdentification:
+          $ref: '#/components/schemas/CallerIdentification'
+        checksum:
+          description: SHA-256 hash of the content
+          examples:
+            - sha256-abc123...
+          type: string
+        content:
+          description: Raw gateway config document
+          examples:
+            - |-
+              apiVersion: v1
+              kind: GatewayConfig
+          type: string
+        createdAt:
+          examples:
+            - '2026-06-07T14:00:00.000Z'
+          format: date-time
+          type: string
+        environments:
+          items:
+            $ref: '#/components/schemas/GatewayEnvironment'
+          type: array
+        gatewayConfigId:
+          examples:
+            - cfg-uuid-1
+          format: uuid
+          type: string
+        id:
+          examples:
+            - ver-uuid-1
+          format: uuid
+          type: string
+        pushedBy:
+          examples:
+            - github-actions[bot]
+          type: string
+        routes:
+          items:
+            $ref: '#/components/schemas/GatewayRoute'
+          type: array
+      required:
+        - id
+        - gatewayConfigId
+        - routes
+        - environments
+        - content
+        - checksum
+        - createdAt
+      type: object
+    GatewayEnvironment:
+      properties:
+        kongAddr:
+          examples:
+            - http://kong-staging:8001
+          type: string
+        name:
+          examples:
+            - staging
+          type: string
+        plugins:
+          items:
+            $ref: '#/components/schemas/GatewayPlugin'
+          type: array
+        upstream:
+          examples:
+            - http://payments-staging:8080
+          type: string
+      required:
+        - name
+        - kongAddr
+        - upstream
+        - plugins
+      type: object
+    GatewayLog:
+      properties:
+        callerConfidence:
+          enum:
+            - high
+            - medium
+            - low
+            - anonymous
+          examples:
+            - high
+          type: string
+        callerId:
+          examples:
+            - consumer-123
+          type: string
+        callerSource:
+          examples:
+            - header:x-consumer-id
+          type: string
+        createdAt:
+          examples:
+            - '2026-06-07T14:00:01.000Z'
+          format: date-time
+          type: string
+        environment:
+          examples:
+            - staging
+          type: string
+        gatewayConfigName:
+          examples:
+            - payments-api-gateway
+          type: string
+        id:
+          examples:
+            - log-uuid-1
+          format: uuid
+          type: string
+        method:
+          examples:
+            - GET
+          type: string
+        occurredAt:
+          examples:
+            - '2026-06-07T14:00:00.000Z'
+          format: date-time
+          type: string
+        path:
+          examples:
+            - /payments
+          type: string
+        provider:
+          examples:
+            - kong
+          type: string
+        routePath:
+          examples:
+            - /payments
+          type: string
+        status:
+          examples:
+            - 200
+          type: integer
+      required:
+        - id
+        - provider
+        - gatewayConfigName
+        - environment
+        - method
+        - path
+        - status
+        - callerConfidence
+        - occurredAt
+        - createdAt
+      type: object
+    GatewayLogStatEntry:
+      properties:
+        environment:
+          examples:
+            - staging
+          type: string
+        gatewayConfigName:
+          examples:
+            - payments-api-gateway
+          type: string
+        lastSeenAt:
+          examples:
+            - '2026-06-07T14:00:00.000Z'
+          format: date-time
+          type: string
+        method:
+          examples:
+            - GET
+          type: string
+        routePath:
+          examples:
+            - /payments
+          type: string
+        totalCalls:
+          examples:
+            - 15042
+          type: integer
+        uniqueCallerIds:
+          examples:
+            - 128
+          type: integer
+      required:
+        - gatewayConfigName
+        - environment
+        - method
+        - routePath
+        - lastSeenAt
+        - totalCalls
+        - uniqueCallerIds
+      type: object
+    GatewayPlugin:
+      properties:
+        config:
+          additionalProperties: true
+          description: Plugin-specific configuration
+          examples:
+            - minute: 1000
+          type: object
+        name:
+          examples:
+            - rate-limiting
+          type: string
+        order:
+          description: Execution order
+          examples:
+            - 1
+          type: integer
+      required:
+        - name
+        - config
+      type: object
+    GatewayRoute:
+      properties:
+        methods:
+          examples:
+            - - GET
+              - POST
+          items:
+            type: string
+          type: array
+        path:
+          examples:
+            - /payments
+          type: string
+      required:
+        - path
+        - methods
+      type: object
+    GetCompatReportResponse:
+      properties:
+        data:
+          $ref: '#/components/schemas/CompatReport'
+      required:
+        - data
+      type: object
+    GetGatewayConfigResponse:
+      properties:
+        data:
+          $ref: '#/components/schemas/GatewayConfig'
+      required:
+        - data
+      type: object
+    GetGatewayConfigVersionResponse:
+      properties:
+        data:
+          $ref: '#/components/schemas/GatewayConfigVersion'
+      required:
+        - data
+      type: object
+    GetGatewayLogResponse:
+      properties:
+        data:
+          $ref: '#/components/schemas/GatewayLog'
+      required:
+        - data
+      type: object
+    GetGatewayLogStatsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/GatewayLogStatEntry'
+          type: array
+      required:
+        - data
+      type: object
+    GetSpecResponse:
+      properties:
+        data:
+          properties:
+            latestVersion:
+              $ref: '#/components/schemas/SpecVersion'
+            spec:
+              $ref: '#/components/schemas/Spec'
+          required:
+            - spec
+          type: object
+      required:
+        - data
+      type: object
+    GetVersionResponse:
+      properties:
+        data:
+          $ref: '#/components/schemas/SpecVersion'
+      required:
+        - data
+      type: object
+    HealthResponse:
+      properties:
+        status:
+          enum:
+            - ok
+          type: string
+        uptime:
+          description: Server uptime in seconds
+          examples:
+            - 3600.42
+          type: number
+        version:
+          examples:
+            - 0.2.0
+          type: string
+      required:
+        - status
+        - version
+        - uptime
+      type: object
+    ListGatewayConfigVersionsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/PublicGatewayConfigVersion'
+          type: array
+      required:
+        - data
+      type: object
+    ListGatewayConfigsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/GatewayConfig'
+          type: array
+      required:
+        - data
+      type: object
+    ListGatewayLogsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/GatewayLog'
+          type: array
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+      required:
+        - data
+        - pagination
+      type: object
+    ListSpecsResponse:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/SpecListItem'
+          type: array
+      required:
+        - data
+      type: object
+    PaginationMeta:
+      properties:
+        hasMore:
+          examples:
+            - true
+          type: boolean
+        limit:
+          examples:
+            - 10
+          type: integer
+        offset:
+          examples:
+            - 0
+          type: integer
+        total:
+          description: Total number of items
+          examples:
+            - 42
+          type: integer
+      required:
+        - hasMore
+        - limit
+        - offset
+        - total
+      type: object
+    PublicGatewayConfigVersion:
+      allOf:
+        - $ref: '#/components/schemas/GatewayConfigVersion'
+      description: Gateway config version without the content field
+      properties:
+        content:
+          description: Content is omitted in list responses to keep them lightweight
+          type:
+            - string
+            - 'null'
+      type: object
+    PushGatewayConfigRequest:
+      properties:
+        callerIdentification:
+          $ref: '#/components/schemas/CallerIdentification'
+        content:
+          description: Raw gateway config document
+          examples:
+            - |-
+              apiVersion: v1
+              kind: GatewayConfig
+          type: string
+        environments:
+          additionalProperties:
+            properties:
+              kongAddr:
+                type: string
+              name:
+                type: string
+              plugins:
+                items:
+                  $ref: '#/components/schemas/GatewayPlugin'
+                type: array
+              upstream:
+                type: string
+            required:
+              - name
+              - kongAddr
+              - upstream
+              - plugins
+            type: object
+          examples:
+            - staging:
+                kongAddr: http://kong-staging:8001
+                name: staging
+                plugins:
+                  - config:
+                      minute: 1000
+                    name: rate-limiting
+                    order: 1
+                upstream: http://payments-staging:8080
+          type: object
+        name:
+          examples:
+            - payments-api-gateway
+          type: string
+        provider:
+          enum:
+            - kong
+          examples:
+            - kong
+          type: string
+        pushedBy:
+          examples:
+            - github-actions[bot]
+          type: string
+        routes:
+          items:
+            $ref: '#/components/schemas/GatewayRoute'
+          type: array
+        specName:
+          examples:
+            - payments-api
+          type: string
+        specSemver:
+          examples:
+            - 1.2.0
+          type: string
+      required:
+        - name
+        - provider
+        - specName
+        - specSemver
+        - routes
+        - environments
+        - content
+      type: object
+    PushGatewayConfigResponse:
+      properties:
+        data:
+          properties:
+            config:
+              $ref: '#/components/schemas/GatewayConfig'
+            version:
+              $ref: '#/components/schemas/GatewayConfigVersion'
+          required:
+            - config
+            - version
+          type: object
+      required:
+        - data
+      type: object
+    PushSpecRequest:
+      properties:
+        content:
+          description: Raw OpenAPI or AsyncAPI document (YAML or JSON)
+          examples:
+            - |-
+              openapi: 3.1.0
+              info:
+                title: Payments API
+                version: 1.0.0
+          type: string
+        description:
+          examples:
+            - Payments service API
+          type: string
+        force:
+          default: false
+          description: Override breaking change block. Requires `reason`.
+          type: boolean
+        gitRef:
+          description: Git commit SHA
+          examples:
+            - a1b2c3d4
+          type: string
+        name:
+          examples:
+            - payments-api
+          pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+          type: string
+        owner:
+          examples:
+            - platform-team
+          type: string
+        prerelease:
+          default: false
+          description: Push as a prerelease version (0.x)
+          type: boolean
+        pushedBy:
+          description: User or CI identity performing the push
+          examples:
+            - github-actions[bot]
+          type: string
+        reason:
+          description: Required when `force` is true. Recorded in the audit log.
+          examples:
+            - security fix CVE-2026-1234
+          type: string
+        sourceRepo:
+          format: uri
+          type: string
+        tags:
+          examples:
+            - - payments
+              - public
+          items:
+            type: string
+          type: array
+        type:
+          $ref: '#/components/schemas/SpecType'
+        visibility:
+          description: >
+            Spec visibility. Known values: "private", "public". Applied on
+            create; on subsequent pushes, supplying it updates the spec's
+            visibility, omitting it leaves visibility unchanged. Default:
+            "private".
+          examples:
+            - public
+          type: string
+      required:
+        - content
+        - name
+      type: object
+    PushSpecResponse:
+      properties:
+        data:
+          properties:
+            compatReport:
+              $ref: '#/components/schemas/CompatReport'
+            isNewSpec:
+              description: True if this is the first version of this spec
+              type: boolean
+            spec:
+              $ref: '#/components/schemas/Spec'
+            unchanged:
+              description: >-
+                True when the pushed content is identical to the latest version
+                and no new version was created (200 response)
+              type: boolean
+            version:
+              $ref: '#/components/schemas/SpecVersion'
+          required:
+            - isNewSpec
+            - spec
+            - version
+            - compatReport
+          type: object
+      required:
+        - data
+      type: object
+    SafeChange:
+      properties:
+        category:
+          enum:
+            - structural
+            - documentation
+          examples:
+            - structural
+          type: string
+        description:
+          examples:
+            - Optional response property 'metadata' added to GET /users/{id}
+          type: string
+        id:
+          examples:
+            - chg-1
+          type: string
+        path:
+          examples:
+            - /users/{id}/GET/response/200/metadata
+          type: string
+        rule:
+          description: >
+            Machine-readable rule identifier. Treat as an open string — new
+            rules will be added as the compat engine evolves. Known values:
+            endpoint-added, endpoint-deprecated, optional-request-param-added,
+            response-status-added, draft-endpoint-changed.
+          examples:
+            - endpoint-added
+          type: string
+      required:
+        - id
+        - rule
+        - description
+        - path
+        - category
+      title: SafeChange
+      type: object
+    Spec:
+      properties:
+        createdAt:
+          examples:
+            - '2026-04-25T10:30:00.000Z'
+          format: date-time
+          type: string
+        description:
+          examples:
+            - Payments service API
+          type: string
+        id:
+          examples:
+            - a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          format: uuid
+          type: string
+        name:
+          examples:
+            - payments-api
+          type: string
+        owner:
+          examples:
+            - platform-team
+          type: string
+        sourceRepo:
+          examples:
+            - https://github.com/acme/payments-service
+          format: uri
+          type: string
+        tags:
+          examples:
+            - - payments
+              - public
+          items:
+            type: string
+          type: array
+        type:
+          $ref: '#/components/schemas/SpecType'
+        updatedAt:
+          examples:
+            - '2026-06-07T14:00:00.000Z'
+          format: date-time
+          type: string
+        visibility:
+          description: >
+            Controls anonymous read access. Treat as an open string — new values
+            may be added as access models evolve. Known values: "private"
+            (authenticated reads only), "public" (anonymous reads allowed for
+            this spec's metadata, versions, content, and compatibility reports).
+            Defaults to "private" on first push.
+          examples:
+            - public
+          type: string
+      required:
+        - id
+        - name
+        - type
+        - tags
+        - visibility
+        - createdAt
+        - updatedAt
+      type: object
+    SpecListItem:
+      allOf:
+        - $ref: '#/components/schemas/Spec'
+      properties:
+        latestVersion:
+          $ref: '#/components/schemas/SpecVersion'
+      type: object
+    SpecType:
+      enum:
+        - openapi
+        - asyncapi
+      type: string
+    SpecVersion:
+      properties:
+        checksum:
+          description: SHA-256 hash of the content
+          examples:
+            - sha256-abc123...
+          type: string
+        compatibility:
+          $ref: '#/components/schemas/CompatReport'
+        createdAt:
+          examples:
+            - '2026-06-07T14:00:00.000Z'
+          format: date-time
+          type: string
+        forceReason:
+          description: Reason provided when force-pushing a breaking change
+          examples:
+            - security fix CVE-2026-1234
+          type: string
+        gitRef:
+          description: Git commit SHA at time of push
+          examples:
+            - a1b2c3d4
+          type: string
+        id:
+          examples:
+            - ver-uuid-1
+          format: uuid
+          type: string
+        isPrerelease:
+          examples:
+            - false
+          type: boolean
+        previousVersion:
+          description: Semver of the previous version this was diffed against
+          examples:
+            - 1.1.0
+          type: string
+        pushedBy:
+          description: User or CI identity that pushed this version
+          examples:
+            - github-actions[bot]
+          type: string
+        semver:
+          examples:
+            - 1.2.0
+          type: string
+        specId:
+          examples:
+            - a1b2c3d4-e5f6-7890-abcd-ef1234567890
+          format: uuid
+          type: string
+      required:
+        - id
+        - specId
+        - semver
+        - checksum
+        - isPrerelease
+        - createdAt
+      type: object
+    UpdateSpecRequest:
+      properties:
+        visibility:
+          description: >
+            New spec visibility. Known values: "private", "public". Changes take
+            effect immediately and do not create a new version.
+          examples:
+            - public
+          type: string
+      required:
+        - visibility
+      type: object
+    UpdateSpecResponse:
+      properties:
+        data:
+          properties:
+            spec:
+              $ref: '#/components/schemas/Spec'
+          required:
+            - spec
+          type: object
+      required:
+        - data
+      type: object
+    ValidateSpecRequest:
+      properties:
+        content:
+          description: Raw OpenAPI or AsyncAPI document (YAML or JSON)
+          examples:
+            - |-
+              openapi: 3.1.0
+              info:
+                title: Payments API
+                version: 1.0.0
+          type: string
+      required:
+        - content
+      type: object
+    ValidateSpecResponse:
+      properties:
+        data:
+          properties:
+            compatReport:
+              $ref: '#/components/schemas/CompatReport'
+            errors:
+              items:
+                type: string
+              type: array
+            unchanged:
+              description: >-
+                True when the content is identical to the latest version;
+                pushing it would register nothing
+              type: boolean
+            valid:
+              type: boolean
+            warnings:
+              items:
+                type: string
+              type: array
+          required:
+            - valid
+          type: object
+      required:
+        - data
+      type: object
+    VersionClassification:
+      enum:
+        - initial
+        - major
+        - minor
+        - patch
+      type: string
+    VersionsPage:
+      properties:
+        data:
+          items:
+            $ref: '#/components/schemas/SpecVersion'
+          type: array
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+      required:
+        - data
+        - pagination
+      type: object
+  parameters:
+    environment:
+      description: Deployment environment (e.g., staging, production)
+      examples:
+        default:
+          summary: Default
+          value: staging
+      in: path
+      name: environment
+      required: true
+      schema:
+        type: string
+    gatewayConfigName:
+      description: URL-friendly gateway config identifier
+      examples:
+        default:
+          summary: Default
+          value: payments-api-gateway
+      in: path
+      name: name
+      required: true
+      schema:
+        pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+        type: string
+    logId:
+      description: Gateway log entry UUID
+      examples:
+        default:
+          summary: Default
+          value: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      in: path
+      name: id
+      required: true
+      schema:
+        format: uuid
+        type: string
+    provider:
+      description: Gateway provider (e.g., kong)
+      examples:
+        default:
+          summary: Default
+          value: kong
+      in: path
+      name: provider
+      required: true
+      schema:
+        type: string
+    semver:
+      description: Semantic version
+      examples:
+        default:
+          summary: Default
+          value: 1.2.0
+      in: path
+      name: semver
+      required: true
+      schema:
+        pattern: ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$
+        type: string
+    specName:
+      description: URL-friendly spec identifier
+      examples:
+        default:
+          summary: Default
+          value: payments-api
+      in: path
+      name: name
+      required: true
+      schema:
+        pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+        type: string
+    versionId:
+      description: Gateway config version UUID
+      examples:
+        default:
+          summary: Default
+          value: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      in: path
+      name: versionId
+      required: true
+      schema:
+        format: uuid
+        type: string
+  securitySchemes:
+    keycloak:
+      description: >-
+        Keycloak OpenID Connect. The actual discovery URL is derived at runtime
+        from the configured Keycloak serverUrl and realm:
+        {serverUrl}/realms/{realm}/.well-known/openid-configuration.
+      openIdConnectUrl: >-
+        https://keycloak.example.com/realms/{realm}/.well-known/openid-configuration
+      type: openIdConnect
+security:
+  - keycloak: []

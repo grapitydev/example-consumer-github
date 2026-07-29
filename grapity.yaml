@@ -1,0 +1,6 @@
+version: '1'
+specs:
+  - name: grapity-registry
+    semver: 0.2.0
+    output: ./grapity/specs/grapity-registry.yaml
+    format: yaml
