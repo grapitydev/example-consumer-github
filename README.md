@@ -18,8 +18,10 @@ and demonstrates automated spec-drift detection on pull requests.
 The consumed spec is public, so the workflow uses anonymous reads
 (`auth: mode: none`) and needs no registry credentials, only a
 `GRAPITY_REGISTRY_URL` repository variable. For registries that require
-authentication (Keycloak client credentials), see the authenticated variant in
-[`grapitydev/grapity/examples/materialize-check`](https://github.com/grapitydev/grapity/tree/main/examples/materialize-check).
+authentication (Keycloak client credentials), the same file carries a
+commented keycloak block to swap in: see
+[`grapitydev/grapity/examples/consumer`](https://github.com/grapitydev/grapity/tree/main/examples/consumer),
+which this workflow is kept in sync with.
 
 ## Try it yourself
 
