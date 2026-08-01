@@ -2,11 +2,11 @@
   "version": "1",
   "specs": {
     "grapity-registry": {
-      "requested": "0.2.0",
-      "resolved": "0.2.0",
-      "latest": "0.2.0",
+      "requested": "0.1.0",
+      "resolved": "0.1.0",
+      "latest": "0.1.0",
       "stale": false,
-      "fetchedAt": "2026-07-29T18:20:28.886Z"
+      "fetchedAt": "2026-07-29T18:55:21.471Z"
     }
   }
 }
